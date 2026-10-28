@@ -64,3 +64,46 @@ Both of those are a pass.
   pipeline, that is how you prove the running version is the one you built.
 - The footer also shows which backend instance answered. When you scale to more
   than one replica, watch it change.
+
+## 1. Kontajnerizácia
+
+Frontend a backend používajú oficiálny base image
+`node:24-bookworm-slim`.
+
+Dockerfiles inštalujú iba produkčné závislosti, kopírujú
+potrebné aplikačné súbory a spúšťajú aplikáciu pod používateľom
+`node`. Konfigurácia aplikácie sa odovzdáva pri spustení.
+
+### Overenie
+
+- Frontend: stránka sa načítala cez port 3000, zobrazila
+  verziu 1.0.0 a stav „backend unreachable“.
+- Backend: GET /api/info na porte 8080 vrátil HTTP 200,
+  verziu 1.0.0, instance backend-test a databaseConnected: false.
+- Používateľ v oboch kontajneroch: uid=1000(node), gid=1000(node).
+
+### Porovnanie veľkostí images
+
+Veľkosti boli zistené príkazom docker image inspect,
+pomocou atribútu Size. Hodnoty sú v bajtoch.
+
+| Image | Pred .dockerignore | Po .dockerignore | Rozdiel |
+|---|---:|---:|---:|
+| Frontend | 339184070 | 339184070 | 0 |
+| Backend | 350006776 | 350006776 | 0 |
+
+Veľkosti zostali rovnaké, pretože Dockerfiles už používajú
+explicitné COPY iba pre potrebné súbory. Súbory .dockerignore
+vylučujú nepotrebné a citlivé súbory z build contextu.
+
+### Docker Hub
+
+Images boli nahrané do vlastných verejných Docker Hub repozitárov:
+
+| Komponent | Image |
+|---|---|
+| Frontend | `nadzady1/tasklist-frontend:1.0.0` |
+| Backend | `nadzady1/tasklist-backend:1.0.0` |
+
+Dostupnosť oboch tagov 1.0.0 bola overená v prehliadači
+bez prihlásenia do Docker Hub.
