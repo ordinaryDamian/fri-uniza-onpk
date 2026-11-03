@@ -1,0 +1,64 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: tasklist-helm-deploy
+  namespace: tasklist
+spec:
+  description: Nasadi MongoDB, backend a frontend pomocou Helm chartov.
+  params:
+    - name: namespace
+      type: string
+      default: tasklist
+    - name: image-tag
+      type: string
+      description: Tag frontend a backend image
+    - name: backend-image-repository
+      type: string
+      default: nadzady1/tasklist-backend
+    - name: frontend-image-repository
+      type: string
+      default: nadzady1/tasklist-frontend
+  workspaces:
+    - name: source
+  results:
+    - name: deployed-tag
+      description: Nasadeny image tag
+  steps:
+    - name: deploy
+      image: alpine/helm:4.3.1
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - name: TARGET_NAMESPACE
+          value: $(params.namespace)
+        - name: IMAGE_TAG
+          value: $(params.image-tag)
+        - name: BACKEND_IMAGE_REPOSITORY
+          value: $(params.backend-image-repository)
+        - name: FRONTEND_IMAGE_REPOSITORY
+          value: $(params.frontend-image-repository)
+      script: |
+        #!/bin/sh
+        set -eu
+
+        helm upgrade --install tasklist-mongodb ./charts/mongodb \
+          --namespace "${TARGET_NAMESPACE}" \
+          --wait \
+          --timeout 5m
+
+        helm upgrade --install tasklist-backend ./charts/backend \
+          --namespace "${TARGET_NAMESPACE}" \
+          --set-string image.repository="${BACKEND_IMAGE_REPOSITORY}" \
+          --set-string image.tag="${IMAGE_TAG}" \
+          --set-string appVersion="${IMAGE_TAG}" \
+          --wait \
+          --timeout 5m
+
+        helm upgrade --install tasklist-frontend ./charts/frontend \
+          --namespace "${TARGET_NAMESPACE}" \
+          --set-string image.repository="${FRONTEND_IMAGE_REPOSITORY}" \
+          --set-string image.tag="${IMAGE_TAG}" \
+          --set-string appVersion="${IMAGE_TAG}" \
+          --wait \
+          --timeout 5m
+
+        printf '%s' "${IMAGE_TAG}" | tee "$(results.deployed-tag.path)"

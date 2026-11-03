@@ -1,0 +1,44 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: tasklist-git-clone
+  namespace: tasklist
+spec:
+  description: Naklonuje zdrojovy repozitar do spolocneho workspace.
+  params:
+    - name: url
+      type: string
+      description: URL Git repozitara
+    - name: revision
+      type: string
+      description: Branch, tag alebo commit
+      default: main
+  workspaces:
+    - name: source
+  results:
+    - name: commit
+      description: Commit SHA naklonovaneho repozitara
+  steps:
+    - name: clone
+      image: alpine/git:2.47.2
+      env:
+        - name: GIT_URL
+          value: $(params.url)
+        - name: GIT_REVISION
+          value: $(params.revision)
+        - name: SOURCE_PATH
+          value: $(workspaces.source.path)
+      script: |
+        #!/bin/sh
+        set -eu
+
+        rm -rf -- "${SOURCE_PATH}/repository"
+
+        git clone \
+          --depth 1 \
+          --branch "${GIT_REVISION}" \
+          "${GIT_URL}" \
+          "${SOURCE_PATH}/repository"
+
+        cd "${SOURCE_PATH}/repository"
+        git rev-parse HEAD | tee "$(results.commit.path)"

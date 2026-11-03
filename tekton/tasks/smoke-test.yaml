@@ -1,0 +1,86 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: tasklist-smoke-test
+  namespace: tasklist
+spec:
+  description: Overi frontend, jeho verziu a spojenie backendu s MongoDB.
+  params:
+    - name: base-url
+      type: string
+      default: http://tasklist-frontend:3000
+    - name: expected-version
+      type: string
+  steps:
+    - name: verify
+      image: node:24-alpine
+      env:
+        - name: BASE_URL
+          value: $(params.base-url)
+        - name: EXPECTED_VERSION
+          value: $(params.expected-version)
+      script: |
+        #!/usr/bin/env node
+
+        const baseUrl = process.env.BASE_URL;
+        const expectedVersion = process.env.EXPECTED_VERSION;
+
+        async function getJson(path) {
+          let lastError;
+
+          for (let attempt = 1; attempt <= 30; attempt++) {
+            try {
+              const response = await fetch(`${baseUrl}${path}`, {
+                headers: { connection: "close" }
+              });
+
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+              }
+
+              return await response.json();
+            } catch (error) {
+              lastError = error;
+              console.log(`Pokus ${attempt}/30 pre ${path} zlyhal: ${error.message}`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+
+          throw lastError;
+        }
+
+        async function main() {
+          const health = await getJson("/healthz");
+          const version = await getJson("/version");
+          const backend = await getJson("/api/info");
+
+          if (health.status !== "ok") {
+            throw new Error(`Frontend health nie je ok: ${JSON.stringify(health)}`);
+          }
+
+          if (version.version !== expectedVersion) {
+            throw new Error(
+              `Frontend verzia ${version.version} != ${expectedVersion}`
+            );
+          }
+
+          if (backend.version !== expectedVersion) {
+            throw new Error(
+              `Backend verzia ${backend.version} != ${expectedVersion}`
+            );
+          }
+
+          if (backend.databaseConnected !== true) {
+            throw new Error("Backend nie je pripojeny k MongoDB");
+          }
+
+          console.log("Frontend:", JSON.stringify(health));
+          console.log("Verzia:", JSON.stringify(version));
+          console.log("Backend:", JSON.stringify(backend));
+          console.log("Smoke test uspesny");
+        }
+
+        main().catch(error => {
+          console.error(error);
+          process.exit(1);
+        });

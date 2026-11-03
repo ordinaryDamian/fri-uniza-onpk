@@ -1,0 +1,113 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: tasklist-ci-cd
+  namespace: tasklist
+spec:
+  description: Zostavi, odosle, nasadi a overi aplikaciu TaskList.
+  params:
+    - name: git-url
+      type: string
+      default: https://github.com/ordinaryDamian/fri-uniza-onpk.git
+    - name: revision
+      type: string
+      default: main
+    - name: image-tag
+      type: string
+      description: Spolocny tag frontend a backend image
+    - name: backend-image-repository
+      type: string
+      default: nadzady1/tasklist-backend
+    - name: frontend-image-repository
+      type: string
+      default: nadzady1/tasklist-frontend
+  workspaces:
+    - name: source
+    - name: dockerconfig
+  results:
+    - name: commit
+      value: $(tasks.clone.results.commit)
+    - name: backend-image-digest
+      value: $(tasks.build-backend.results.image-digest)
+    - name: frontend-image-digest
+      value: $(tasks.build-frontend.results.image-digest)
+    - name: deployed-tag
+      value: $(tasks.deploy.results.deployed-tag)
+  tasks:
+    - name: clone
+      taskRef:
+        name: tasklist-git-clone
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.revision)
+      workspaces:
+        - name: source
+          workspace: source
+
+    - name: build-backend
+      runAfter:
+        - clone
+      taskRef:
+        name: tasklist-build-push
+      params:
+        - name: image
+          value: $(params.backend-image-repository):$(params.image-tag)
+        - name: context
+          value: backend
+        - name: dockerfile
+          value: backend/Dockerfile
+      workspaces:
+        - name: source
+          workspace: source
+        - name: dockerconfig
+          workspace: dockerconfig
+
+    - name: build-frontend
+      runAfter:
+        - clone
+      taskRef:
+        name: tasklist-build-push
+      params:
+        - name: image
+          value: $(params.frontend-image-repository):$(params.image-tag)
+        - name: context
+          value: frontend
+        - name: dockerfile
+          value: frontend/Dockerfile
+      workspaces:
+        - name: source
+          workspace: source
+        - name: dockerconfig
+          workspace: dockerconfig
+
+    - name: deploy
+      runAfter:
+        - build-backend
+        - build-frontend
+      taskRef:
+        name: tasklist-helm-deploy
+      params:
+        - name: namespace
+          value: tasklist
+        - name: image-tag
+          value: $(params.image-tag)
+        - name: backend-image-repository
+          value: $(params.backend-image-repository)
+        - name: frontend-image-repository
+          value: $(params.frontend-image-repository)
+      workspaces:
+        - name: source
+          workspace: source
+
+    - name: smoke-test
+      runAfter:
+        - deploy
+      taskRef:
+        name: tasklist-smoke-test
+      params:
+        - name: base-url
+          value: http://tasklist-frontend:3000
+        - name: expected-version
+          value: $(params.image-tag)

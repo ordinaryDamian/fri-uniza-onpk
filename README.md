@@ -187,3 +187,50 @@ Pode, ale po odstránení alebo nahradení Podu sa stratia.
   zachovanie po obnovení stránky a odstránenie úlohy.
 - Z hostiteľského servera úspešne odpovedali endpointy `/healthz`, `/version`
   a proxovaný `/api/info` cez port 30080.
+
+## 3. CI/CD s Tektonom
+
+CI/CD je implementované pomocou Tekton Pipelines `v1.15.3` a Tekton CLI
+`v0.46.1`. Manifesty a podrobný postup sú v priečinku `tekton/`.
+
+Pipeline má nasledujúci priebeh:
+
+```text
+clone → build-backend ─┐
+      → build-frontend ├→ deploy → smoke-test
+                       ┘
+```
+
+- zdrojový kód sa klonuje zo zadanej Git revízie,
+- frontend a backend sa paralelne zostavia pomocou Buildah,
+- images sa odošlú do Docker Hub,
+- Helm nasadí MongoDB, backend a frontend,
+- smoke test overí zdravie aplikácie, verzie a pripojenie k databáze.
+
+Buildah image je pripnutý na nemenný OCI digest. Pipeline používa samostatný
+ServiceAccount s oprávneniami iba v namespace `tasklist`.
+
+Docker Hub token je uložený iba v Kubernetes Secrete
+`dockerhub-credentials`. Token ani Secret nie sú súčasťou Git repozitára.
+
+### Spustenie Pipeline
+
+Pred spustením sa v `tekton/pipelinerun.yaml` nastaví nový `image-tag`:
+
+```bash
+kubectl create -f tekton/pipelinerun.yaml
+tkn pipelinerun logs --last --follow -n tasklist
+```
+
+### Overenie
+
+PipelineRun pre tag `1.0.1` skončil stavom `Succeeded` a nasadil:
+
+| Komponent | Image |
+|---|---|
+| Backend | `nadzady1/tasklist-backend:1.0.1` |
+| Frontend | `nadzady1/tasklist-frontend:1.0.1` |
+
+Digesty v Pipeline results sa zhodovali s digestmi tagov na Docker Hub.
+Smoke test potvrdil verziu `1.0.1` na oboch aplikačných vrstvách a
+`databaseConnected: true`.

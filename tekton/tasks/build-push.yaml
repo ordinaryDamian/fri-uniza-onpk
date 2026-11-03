@@ -1,0 +1,65 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: tasklist-build-push
+  namespace: tasklist
+spec:
+  description: Zostavi Docker image pomocou Buildah a odosle ho do registry.
+  params:
+    - name: image
+      type: string
+      description: Cielovy image vratane tagu
+    - name: context
+      type: string
+      description: Cesta k build contextu v repozitari
+    - name: dockerfile
+      type: string
+      description: Cesta k Dockerfile v repozitari
+  workspaces:
+    - name: source
+    - name: dockerconfig
+  results:
+    - name: image-url
+      description: Cielovy image vratane tagu
+    - name: image-digest
+      description: Digest odoslaneho image
+  steps:
+    - name: build-and-push
+      image: quay.io/buildah/stable:v1@sha256:7263d9aa9395ecac7d7416623629ceccb0d701d05395f6abd67b250b3408abf6
+      workingDir: $(workspaces.source.path)/repository
+      securityContext:
+        privileged: true
+      env:
+        - name: IMAGE
+          value: $(params.image)
+        - name: CONTEXT
+          value: $(params.context)
+        - name: DOCKERFILE
+          value: $(params.dockerfile)
+        - name: AUTH_FILE
+          value: $(workspaces.dockerconfig.path)/.dockerconfigjson
+      script: |
+        #!/bin/sh
+        set -eu
+
+        buildah --storage-driver=vfs bud \
+          --format docker \
+          --layers=false \
+          --file "${DOCKERFILE}" \
+          --tag "${IMAGE}" \
+          "${CONTEXT}"
+
+        buildah --storage-driver=vfs push \
+          --authfile "${AUTH_FILE}" \
+          --digestfile /tmp/image-digest \
+          "${IMAGE}" \
+          "docker://${IMAGE}"
+
+        printf '%s' "${IMAGE}" | tee "$(results.image-url.path)"
+        cat /tmp/image-digest | tee "$(results.image-digest.path)"
+      volumeMounts:
+        - name: containers-storage
+          mountPath: /var/lib/containers
+  volumes:
+    - name: containers-storage
+      emptyDir: {}

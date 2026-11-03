@@ -1,0 +1,30 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: tasklist-ci-cd-
+  namespace: tasklist
+spec:
+  pipelineRef:
+    name: tasklist-ci-cd
+  taskRunTemplate:
+    serviceAccountName: tasklist-pipeline
+  params:
+    - name: git-url
+      value: https://github.com/ordinaryDamian/fri-uniza-onpk.git
+    - name: revision
+      value: main
+    - name: image-tag
+      value: "1.0.1"
+    - name: backend-image-repository
+      value: nadzady1/tasklist-backend
+    - name: frontend-image-repository
+      value: nadzady1/tasklist-frontend
+  workspaces:
+    - name: source
+      persistentVolumeClaim:
+        claimName: tasklist-source-pvc
+    - name: dockerconfig
+      secret:
+        secretName: dockerhub-credentials
+  timeouts:
+    pipeline: 30m
