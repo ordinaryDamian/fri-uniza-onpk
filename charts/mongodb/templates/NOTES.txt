@@ -1,0 +1,14 @@
+MongoDB bolo nasadené ako release {{ .Release.Name }}.
+
+Stav podu skontrolujete príkazom:
+
+  kubectl get pods -n {{ .Release.Namespace }} \
+    -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Interná adresa MongoDB v rovnakom namespace:
+
+  {{ .Release.Name }}:{{ .Values.service.port }}
+
+Prihlasovacie údaje sú uložené v Secrete:
+
+  {{ .Release.Name }}-auth

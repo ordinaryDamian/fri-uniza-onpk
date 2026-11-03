@@ -1,0 +1,18 @@
+Frontend bol nasadený ako release {{ .Release.Name }}.
+
+Stav frontend Podov:
+
+  kubectl get pods -n {{ .Release.Namespace }} \
+    -l app.kubernetes.io/instance={{ .Release.Name }}
+
+{{- if eq .Values.service.type "NodePort" }}
+
+Frontend je dostupný cez NodePort:
+
+  http://<IP-servera>:{{ .Values.service.nodePort }}
+{{- else }}
+
+Interná adresa frontendu:
+
+  http://{{ .Release.Name }}:{{ .Values.service.port }}
+{{- end }}

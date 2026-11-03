@@ -107,3 +107,83 @@ Images boli nahrané do vlastných verejných Docker Hub repozitárov:
 
 Dostupnosť oboch tagov 1.0.0 bola overená v prehliadači
 bez prihlásenia do Docker Hub.
+
+
+## 2. Kubernetes a Helm
+
+Aplikácia je nasadená do lokálneho Kubernetes klastra Minikube pomocou troch
+samostatných Helm chartov:
+
+| Komponent | Helm chart | Service |
+|---|---|---|
+| MongoDB | `charts/mongodb` | `ClusterIP`, port 27017 |
+| Backend | `charts/backend` | `ClusterIP`, port 8080 |
+| Frontend | `charts/frontend` | `NodePort`, port 30080 |
+
+Podrobné parametre jednotlivých chartov sú uvedené v ich vlastných README
+súboroch. Všetky charty obsahujú `values.schema.json`, resource requests a
+limits, startup, readiness a liveness probes.
+
+### Spustenie Minikube po reštarte servera
+
+```bash
+bash /home/dacker/fri-uniza-onpk/scripts/start-minikube.sh
+```
+
+Skript spustí existujúci Minikube profil, nastaví DNS v Minikube node a počká,
+kým bude node v stave `Ready`.
+
+### Nasadenie
+
+Charty sa nasadzujú v tomto poradí:
+
+```bash
+helm upgrade --install tasklist-mongodb ./charts/mongodb \
+  --namespace tasklist \
+  --create-namespace \
+  --wait \
+  --timeout 5m
+
+helm upgrade --install tasklist-backend ./charts/backend \
+  --namespace tasklist \
+  --wait \
+  --timeout 5m
+
+helm upgrade --install tasklist-frontend ./charts/frontend \
+  --namespace tasklist \
+  --wait \
+  --timeout 5m
+```
+
+Frontend je dostupný na adrese:
+
+```text
+http://192.168.0.123:30080
+```
+
+Backend ani MongoDB nie sú priamo dostupné mimo Kubernetes klastra.
+
+### Konfigurácia a Secret
+
+MongoDB chart pri prvej inštalácii vygeneruje prihlasovacie údaje a uloží ich
+do Secretu `tasklist-mongodb-auth`. Backend načíta `MONGO_URL` z kľúča
+`mongo-url` tohto Secretu.
+
+Pri Helm upgrade sa existujúce prihlasovacie údaje zachovajú. Bolo to overené
+porovnaním SHA-256 odtlačkov Secretu pred a po upgrade.
+
+MongoDB používa zväzok `emptyDir`. Dáta prežijú reštart kontajnera v rovnakom
+Pode, ale po odstránení alebo nahradení Podu sa stratia.
+
+### Overenie nasadenia
+
+- MongoDB odpovedala na autentifikovaný príkaz `ping`.
+- Backend bol nasadený s dvoma replikami.
+- Obe backend repliky vracali `databaseConnected: true`.
+- Kubernetes Service rozdeľovala požiadavky medzi obe backend inštancie.
+- Frontend bol nasadený s dvoma replikami a komunikoval s backendom cez internú
+  adresu `http://tasklist-backend:8080`.
+- Cez webové rozhranie bolo overené vytvorenie, označenie, filtrovanie,
+  zachovanie po obnovení stránky a odstránenie úlohy.
+- Z hostiteľského servera úspešne odpovedali endpointy `/healthz`, `/version`
+  a proxovaný `/api/info` cez port 30080.

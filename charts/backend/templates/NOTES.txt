@@ -1,0 +1,15 @@
+Backend bol nasadený ako release {{ .Release.Name }}.
+
+Stav backend Podov:
+
+  kubectl get pods -n {{ .Release.Namespace }} \
+    -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Interná adresa backendu:
+
+  http://{{ .Release.Name }}:{{ .Values.service.port }}
+
+Dočasné lokálne sprístupnenie na kontrolu:
+
+  kubectl port-forward -n {{ .Release.Namespace }} \
+    service/{{ .Release.Name }} {{ .Values.service.port }}:{{ .Values.service.port }}
